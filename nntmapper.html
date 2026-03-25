@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- CSP: unsafe-inline required for single-file app; unsafe-eval required by Plotly.js expression parser -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self';" />
   <title>NNTMapper — Meta-Analytic Effect → Clinical Decision</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -245,8 +246,9 @@
         <!-- Decision Curve -->
         <div id="decisionCurveChart" style="width:100%;height:320px;margin-top:16px;"></div>
 
-        <div style="margin-top:12px;text-align:right;">
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
           <button class="btn-primary btn-sm" onclick="exportBundle()">Export TruthCert Bundle</button>
+          <button class="btn-primary btn-sm" onclick="exportRScript()">Export R Validation Script</button>
         </div>
       </div>
     </div>
@@ -310,10 +312,12 @@ function normalCDF(x) {
   return 0.5 * (1 + sign * y);
 }
 
-function tQuantile(df, p) {
-  // Approximation for t-distribution quantile (Hill 1970)
+function tQuantile(df, alpha) {
+  // Hill 1970 Algorithm 396 — alpha is the TWO-TAILED significance level (e.g., 0.05 for 95% PI)
   if (df <= 0) return 1.96;
-  if (df >= 120) return normalQuantile(p);
+  if (df === 1) return 1 / Math.tan(alpha * Math.PI / 2); // Cauchy exact
+  if (df >= 120) return normalQuantile(1 - alpha / 2);
+  const p = alpha; // Hill expects two-tailed alpha
   const a = 1 / (df - 0.5);
   const b = 48 / (a * a);
   let c = ((20700 * a / b - 98) * a - 16) * a + 96.36;
@@ -382,7 +386,7 @@ const EXAMPLES = {
     label: 'SGLT2i in HFrEF',
     measure: 'OR', est: 0.74, lo: 0.66, hi: 0.83,
     i2: 0, tau2: 0, k: 8, cer: 20,
-    source: 'McMurray et al. (DAPA-HF, EMPEROR-Reduced pooled)'
+    source: 'Vaduganathan et al. (Lancet 2020) — SGLT2i in HFrEF pooled (8 trials)'
   },
   statins: {
     label: 'Statins Primary Prevention',
@@ -401,16 +405,20 @@ const EXAMPLES = {
 /* ── Compute Engine ────────────────────────────────────────────── */
 
 function compute() {
+  // Helper: parseFloat returns NaN for empty/invalid — ?? does NOT catch NaN, so use isFinite guard
+  function pNum(id, fallback) { const v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : fallback; }
+  function pInt(id, fallback) { const v = parseInt(document.getElementById(id).value); return isFinite(v) ? v : fallback; }
+
   const measure = document.getElementById('effectMeasure').value;
-  const est = parseFloat(document.getElementById('effectEst').value);
-  const lo  = parseFloat(document.getElementById('effectLo').value);
-  const hi  = parseFloat(document.getElementById('effectHi').value);
-  const i2  = parseFloat(document.getElementById('i2').value) ?? 0;
-  const tau2 = parseFloat(document.getElementById('tau2').value) ?? 0;
-  const k   = parseInt(document.getElementById('kStudies').value) ?? 2;
-  const cer = parseFloat(document.getElementById('baselineRisk').value) / 100;
-  const popSize = parseInt(document.getElementById('popSize').value) ?? 10000;
-  const costPerTx = parseFloat(document.getElementById('costPerTx').value) ?? 10000;
+  const est = pNum('effectEst', NaN);
+  const lo  = pNum('effectLo', NaN);
+  const hi  = pNum('effectHi', NaN);
+  const i2  = pNum('i2', 0);
+  const tau2 = pNum('tau2', 0);
+  const k   = pInt('kStudies', 2);
+  const cer = pNum('baselineRisk', 10) / 100;
+  const popSize = pInt('popSize', 10000);
+  const costPerTx = pNum('costPerTx', 10000);
 
   if (!isFinite(est) || !isFinite(lo) || !isFinite(hi) || est <= 0 || lo <= 0 || hi <= 0) {
     document.getElementById('nntValue').textContent = 'Invalid input';
@@ -420,28 +428,32 @@ function compute() {
   // Point estimate NNT
   const res = computeNNT(measure, est, cer);
 
-  // CI for NNT: apply formula to CI bounds (note: NNT inverts the order)
+  // CI for NNT: apply formula to CI bounds
+  // When CI crosses null (one benefit, one harm), use Altman convention: NNTB X to inf to NNTH Y
   const resLo = computeNNT(measure, lo, cer);
   const resHi = computeNNT(measure, hi, cer);
+  const ciCrossesNull = resLo.isHarmful !== resHi.isHarmful;
   const nntLoCI = Math.min(resLo.nnt, resHi.nnt);
   const nntHiCI = Math.max(resLo.nnt, resHi.nnt);
 
   // Prediction interval: theta ± t_{k-2} * sqrt(SE² + tau²)
   const logEst = Math.log(est);
   const logSE  = (Math.log(hi) - Math.log(lo)) / (2 * 1.96);
-  const tCrit  = k > 2 ? tQuantile(k - 2, 0.975) : 2.0;
-  const piHalfWidth = tCrit * Math.sqrt(logSE * logSE + tau2);
-  const piLoEffect = Math.exp(logEst - piHalfWidth);
-  const piHiEffect = Math.exp(logEst + piHalfWidth);
-  const resPiLo = computeNNT(measure, piLoEffect, cer);
-  const resPiHi = computeNNT(measure, piHiEffect, cer);
-  const piNntLo = Math.min(resPiLo.nnt, resPiHi.nnt);
-  const piNntHi = Math.max(resPiLo.nnt, resPiHi.nnt);
+  const tCrit  = k > 2 ? tQuantile(k - 2, 0.05) : null; // null = not estimable for k<=2
+  let piNntLo = null, piNntHi = null, piEstimable = false;
+  if (tCrit !== null) {
+    const piHalfWidth = tCrit * Math.sqrt(logSE * logSE + tau2);
+    const piLoEffect = Math.exp(logEst - piHalfWidth);
+    const piHiEffect = Math.exp(logEst + piHalfWidth);
+    const resPiLo = computeNNT(measure, piLoEffect, cer);
+    const resPiHi = computeNNT(measure, piHiEffect, cer);
+    piNntLo = Math.min(resPiLo.nnt, resPiHi.nnt);
+    piNntHi = Math.max(resPiLo.nnt, resPiHi.nnt);
+    piEstimable = true;
+  }
 
-  // RRR
-  const rrr = measure === 'OR'
-    ? 1 - (est * (1 - cer)) / (1 - cer + cer * est) / cer * (1 - cer + cer)
-    : 1 - est;
+  // RRR = 1 - EER/CER (correct for all measures, depends on baseline risk)
+  const rrr = cer > 0 ? res.arr / cer : 0;
 
   // Population impact
   const eventsPrevented = Math.round(res.arr * popSize);
@@ -449,23 +461,29 @@ function compute() {
     ? costPerTx * popSize / eventsPrevented
     : Infinity;
 
-  // GRADE-style certainty
-  let certainty = 'High';
-  if (i2 > 50) certainty = 'Low';
-  else if (i2 > 25) certainty = 'Moderate';
-  if (k < 5) certainty = certainty === 'High' ? 'Moderate' : 'Low';
+  // GRADE-style certainty (simplified: inconsistency + imprecision + sample size)
+  let gradeScore = 4; // Start at High
+  if (i2 > 50) gradeScore -= 2;       // Serious inconsistency
+  else if (i2 > 25) gradeScore -= 1;  // Some inconsistency
+  if (ciCrossesNull) gradeScore -= 1;  // Imprecision: CI includes null
+  if (k < 5) gradeScore -= 1;          // Few studies
+  const certainty = gradeScore >= 4 ? 'High' : gradeScore === 3 ? 'Moderate'
+                   : gradeScore === 2 ? 'Low' : 'Very Low';
 
   // ── Update DOM ──
   const gauge = document.getElementById('nntGauge');
   const nntDisp = res.isHarmful ? 'NNH ' + Math.round(res.nnt) : Math.round(res.nnt);
   document.getElementById('nntValue').textContent = nntDisp;
   gauge.className = 'nnt-gauge ' + (res.isHarmful ? 'red' : res.nnt <= 20 ? 'green' : res.nnt <= 50 ? 'amber' : 'red');
-  document.getElementById('nntCI').textContent =
-    '95% CI: ' + Math.round(nntLoCI) + ' to ' + Math.round(nntHiCI);
+  document.getElementById('nntCI').textContent = ciCrossesNull
+    ? 'NNTB ' + Math.round(nntLoCI) + ' to \u221E to NNTH ' + Math.round(nntHiCI)
+    : '95% CI: ' + Math.round(nntLoCI) + ' to ' + Math.round(nntHiCI);
 
   document.getElementById('arrVal').textContent = (res.arr * 100).toFixed(1) + '%';
-  document.getElementById('rrrVal').textContent = ((1 - est) * 100).toFixed(0) + '%';
-  document.getElementById('piNNT').textContent = Math.round(piNntLo) + ' – ' + Math.round(piNntHi);
+  document.getElementById('rrrVal').textContent = (rrr * 100).toFixed(1) + '%';
+  document.getElementById('piNNT').textContent = piEstimable
+    ? Math.round(piNntLo) + ' – ' + Math.round(piNntHi)
+    : 'Not estimable (k\u22642)';
   document.getElementById('eventsPreventedVal').textContent =
     (eventsPrevented >= 0 ? '+' : '') + eventsPrevented.toLocaleString();
   document.getElementById('costPerEvent').textContent =
@@ -478,7 +496,7 @@ function compute() {
 
   // Store for export
   window._lastResult = { measure, est, lo, hi, i2, tau2, k, cer, popSize, costPerTx,
-    nnt: res.nnt, arr: res.arr, rrr: 1 - est, nntCI: [nntLoCI, nntHiCI],
+    nnt: res.nnt, arr: res.arr, rrr: rrr, nntCI: [nntLoCI, nntHiCI],
     piNNT: [piNntLo, piNntHi], eventsPrevented, costPerEventPrevented, certainty,
     isHarmful: res.isHarmful };
 }
@@ -529,12 +547,9 @@ function renderDecisionCurve(measure, est, cer) {
   const thresholds = [];
   const treatAll = [], treatNone = [], metaAnalytic = [];
 
-  // Derive RR from whatever measure was given
+  // Derive RR-equivalent from whatever measure was given
   let rr;
   if (measure === 'OR') {
-    rr = est * (1 - cer) / (1 - cer + cer * est) / cer * cer +
-         est / (1 - cer + cer * est) * (1 - cer);
-    // Simpler: eer/cer ratio
     const eer = cer * est / (1 - cer + cer * est);
     rr = eer / cer;
   } else if (measure === 'RR') {
@@ -615,6 +630,87 @@ async function exportBundle() {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'nntmapper_' + now.slice(0,10).replace(/-/g,'') + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ── R Validation Script Export ─────────────────────────────────── */
+
+function exportRScript() {
+  if (!window._lastResult) { alert('Run computation first.'); return; }
+  const r = window._lastResult;
+
+  const script = `# NNTMapper R Validation Script
+# Generated: ${new Date().toISOString()}
+# Verifies JS NNT calculations against base R
+
+measure <- "${r.measure}"
+est     <- ${r.est}
+lo      <- ${r.lo}
+hi      <- ${r.hi}
+cer     <- ${r.cer}   # baseline risk (control event rate)
+tau2    <- ${r.tau2}
+k       <- ${r.k}
+
+# ── NNT formulas ──
+compute_nnt <- function(measure, effect, cer) {
+  if (measure == "OR") {
+    eer <- cer * effect / (1 - cer + cer * effect)
+  } else if (measure == "RR") {
+    eer <- cer * effect
+  } else {  # HR
+    eer <- 1 - (1 - cer)^effect
+  }
+  arr <- cer - eer
+  nnt <- ifelse(arr != 0, 1 / abs(arr), Inf)
+  list(eer = eer, arr = arr, nnt = nnt, harmful = arr < 0)
+}
+
+# Point estimate
+res <- compute_nnt(measure, est, cer)
+cat("=== R Validation Results ===\\n")
+cat(sprintf("EER:  %.6f\\n", res$eer))
+cat(sprintf("ARR:  %.6f\\n", res$arr))
+cat(sprintf("NNT:  %.1f\\n", res$nnt))
+cat(sprintf("RRR:  %.4f\\n", res$arr / cer))
+
+# CI
+res_lo <- compute_nnt(measure, lo, cer)
+res_hi <- compute_nnt(measure, hi, cer)
+cat(sprintf("NNT CI: [%.1f, %.1f]\\n", min(res_lo$nnt, res_hi$nnt), max(res_lo$nnt, res_hi$nnt)))
+
+# Prediction interval
+log_se <- (log(hi) - log(lo)) / (2 * qnorm(0.975))
+if (k > 2) {
+  t_crit <- qt(0.975, df = k - 2)
+  pi_hw  <- t_crit * sqrt(log_se^2 + tau2)
+  pi_lo_eff <- exp(log(est) - pi_hw)
+  pi_hi_eff <- exp(log(est) + pi_hw)
+  r_pi_lo <- compute_nnt(measure, pi_lo_eff, cer)
+  r_pi_hi <- compute_nnt(measure, pi_hi_eff, cer)
+  cat(sprintf("PI (effect): [%.4f, %.4f]\\n", pi_lo_eff, pi_hi_eff))
+  cat(sprintf("PI (NNT):    [%.1f, %.1f]\\n", min(r_pi_lo$nnt, r_pi_hi$nnt), max(r_pi_lo$nnt, r_pi_hi$nnt)))
+} else {
+  cat("PI: Not estimable (k <= 2)\\n")
+}
+
+# ── Compare with JS ──
+cat("\\n=== JS vs R Comparison ===\\n")
+cat(sprintf("JS NNT:  ${r.nnt.toFixed(1)}  |  R NNT:  %.1f  |  Match: %s\\n",
+    res$nnt, ifelse(abs(res$nnt - ${r.nnt}) < 0.1, "YES", "NO")))
+cat(sprintf("JS ARR:  ${r.arr.toFixed(6)}  |  R ARR:  %.6f  |  Match: %s\\n",
+    res$arr, ifelse(abs(res$arr - ${r.arr}) < 1e-6, "YES", "NO")))
+cat(sprintf("JS RRR:  ${r.rrr.toFixed(4)}  |  R RRR:  %.4f  |  Match: %s\\n",
+    res$arr / cer, ifelse(abs(res$arr / cer - ${r.rrr}) < 1e-4, "YES", "NO")))
+`;
+
+  const blob = new Blob([script], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'nntmapper_validation.R';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

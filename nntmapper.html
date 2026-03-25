@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self';" />
+  <title>NNTMapper — Meta-Analytic Effect → Clinical Decision</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    /* ── CSS Custom Properties ─────────────────────────────────────── */
+    :root {
+      --bg: #f8f9fa; --bg-card: #ffffff; --text: #1a1a2e; --text-muted: #6c757d;
+      --text-accent: #0d6efd; --border: #dee2e6; --success: #198754; --warning: #c25e00;
+      --danger: #dc3545; --amber-bg: #fff3cd; --green-bg: #d1e7dd; --red-bg: #f8d7da;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    [data-theme="dark"] {
+      --bg: #1a1a2e; --bg-card: #16213e; --text: #e0e0e0; --text-muted: #9ca3af;
+      --text-accent: #6ea8fe; --border: #374151; --success: #75b798; --warning: #ffda6a;
+      --danger: #ea868f; --amber-bg: #3d3000; --green-bg: #0a3622; --red-bg: #2c0b0e;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* ── Reset + Base ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           background: var(--bg); color: var(--text); line-height: 1.6; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+               overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+
+    /* ── Header ────────────────────────────────────────────────────── */
+    .header { background: var(--bg-card); border-bottom: 1px solid var(--border);
+              padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+              position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
+    .header h1 { font-size: 1.25rem; font-weight: 700; color: var(--text-accent); }
+    .header-btns { display: flex; gap: 8px; }
+    .header-btns button { background: none; border: 1px solid var(--border); color: var(--text);
+                          padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+    .header-btns button:hover { background: var(--text-accent); color: #fff; }
+    .header-btns button:focus { outline: 2px solid var(--text-accent); outline-offset: 2px; }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 20px; box-shadow: var(--shadow); }
+    .card-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; color: var(--text-accent); }
+
+    /* ── Forms ─────────────────────────────────────────────────────── */
+    label { display: block; font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; color: var(--text-muted); }
+    input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+                    background: var(--bg); color: var(--text); font-size: 0.9rem; }
+    input:focus, select:focus { outline: 2px solid var(--text-accent); outline-offset: 1px; }
+    .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .form-row > div { flex: 1; }
+    .form-group { margin-bottom: 12px; }
+
+    /* ── Slider ────────────────────────────────────────────────────── */
+    input[type="range"] { -webkit-appearance: none; height: 6px; border-radius: 3px;
+                          background: var(--border); outline: none; margin: 8px 0; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px;
+                                                 border-radius: 50%; background: var(--text-accent); cursor: pointer; }
+    .slider-display { font-size: 1.1rem; font-weight: 700; color: var(--text-accent); text-align: center; }
+
+    /* ── NNT Gauge ─────────────────────────────────────────────────── */
+    .nnt-gauge { text-align: center; padding: 20px; border-radius: 10px; margin-bottom: 16px; }
+    .nnt-gauge.green { background: var(--green-bg); }
+    .nnt-gauge.amber { background: var(--amber-bg); }
+    .nnt-gauge.red { background: var(--red-bg); }
+    .nnt-value { font-size: 2.8rem; font-weight: 800; line-height: 1.1; }
+    .nnt-label { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+    .nnt-ci { font-size: 0.9rem; margin-top: 6px; }
+
+    /* ── Results Grid ──────────────────────────────────────────────── */
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .metric-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+                  padding: 12px; text-align: center; }
+    .metric-box .val { font-size: 1.3rem; font-weight: 700; }
+    .metric-box .lbl { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* ── About Modal ───────────────────────────────────────────────── */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                     background: rgba(0,0,0,0.5); z-index: 200; display: flex;
+                     align-items: center; justify-content: center; }
+    .modal-overlay.hidden { display: none; }
+    .modal { background: var(--bg-card); border-radius: 12px; max-width: 600px; width: 90%;
+             max-height: 80vh; overflow-y: auto; padding: 24px; position: relative; }
+    .modal h2 { margin-bottom: 12px; }
+    .modal-close { position: absolute; top: 12px; right: 16px; background: none; border: none;
+                   font-size: 1.4rem; cursor: pointer; color: var(--text); }
+    .modal-close:focus { outline: 2px solid var(--text-accent); }
+
+    /* ── Compute Button ────────────────────────────────────────────── */
+    .btn-primary { background: var(--text-accent); color: #fff; border: none; padding: 10px 20px;
+                   border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; width: 100%; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:focus { outline: 2px solid var(--text-accent); outline-offset: 2px; }
+    .btn-sm { padding: 6px 12px; font-size: 0.82rem; width: auto; }
+  </style>
+</head>
+<body>
+<a href="#main-content" class="sr-only" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:999;" onfocus="this.style.cssText='position:fixed;top:0;left:0;z-index:9999;padding:8px 16px;background:var(--text-accent);color:#fff;font-size:1rem;text-decoration:none;border-radius:4px;'" onblur="this.style.cssText='position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:999;'">Skip to main content</a>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════════════ -->
+<header class="header">
+  <h1>NNTMapper</h1>
+  <span class="sr-only">Meta-Analytic Effect to Clinical Decision Converter</span>
+  <div class="header-btns">
+    <button id="aboutBtn" aria-label="About NNTMapper">About</button>
+    <button id="darkModeBtn" aria-label="Toggle dark mode">Dark Mode</button>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MAIN CONTENT
+═══════════════════════════════════════════════════════════════════ -->
+<main id="main-content" class="container">
+  <div class="grid">
+
+    <!-- ── LEFT: Input Panel ───────────────────────────────────── -->
+    <div>
+      <div class="card">
+        <h2 class="card-title">Meta-Analytic Input</h2>
+
+        <div class="form-group">
+          <label for="exampleSelect">Load Example</label>
+          <select id="exampleSelect">
+            <option value="">— Custom —</option>
+            <option value="sglt2i">SGLT2i in HFrEF (OR 0.74)</option>
+            <option value="statins">Statins Primary Prevention (RR 0.75)</option>
+            <option value="aspirin">Aspirin Secondary Prevention (RR 0.80)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="effectMeasure">Effect Measure</label>
+          <select id="effectMeasure">
+            <option value="OR">Odds Ratio (OR)</option>
+            <option value="RR">Risk Ratio (RR)</option>
+            <option value="HR">Hazard Ratio (HR)</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label for="effectEst">Point Estimate</label>
+            <input type="number" id="effectEst" step="0.01" value="0.74" />
+          </div>
+          <div>
+            <label for="effectLo">95% CI Lower</label>
+            <input type="number" id="effectLo" step="0.01" value="0.66" />
+          </div>
+          <div>
+            <label for="effectHi">95% CI Upper</label>
+            <input type="number" id="effectHi" step="0.01" value="0.83" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label for="i2">I² (%)</label>
+            <input type="number" id="i2" min="0" max="100" step="1" value="0" />
+          </div>
+          <div>
+            <label for="tau2">tau²</label>
+            <input type="number" id="tau2" min="0" step="0.001" value="0" />
+          </div>
+          <div>
+            <label for="kStudies">Studies (k)</label>
+            <input type="number" id="kStudies" min="1" step="1" value="8" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="baselineRisk">Baseline Risk (Control Event Rate)</label>
+          <div class="slider-display" id="cerDisplay">20.0%</div>
+          <input type="range" id="baselineRisk" min="1" max="50" step="0.5" value="20"
+                 role="slider" aria-valuemin="1" aria-valuemax="50" aria-valuenow="20"
+                 aria-label="Baseline risk percentage" />
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label for="popSize">Population Size</label>
+            <input type="number" id="popSize" min="100" step="100" value="10000" />
+          </div>
+          <div>
+            <label for="costPerTx">Cost/Treatment/Year ($)</label>
+            <input type="number" id="costPerTx" min="0" step="100" value="10000" />
+          </div>
+        </div>
+
+        <button class="btn-primary" id="computeBtn" onclick="compute()">Compute NNT &amp; Decision Metrics</button>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: Results Panel ────────────────────────────────── -->
+    <div>
+      <div class="card" aria-live="polite" aria-atomic="true" id="resultsPanel">
+        <h2 class="card-title">Results</h2>
+
+        <div class="nnt-gauge green" id="nntGauge">
+          <div class="nnt-value" id="nntValue">—</div>
+          <div class="nnt-label">Number Needed to Treat</div>
+          <div class="nnt-ci" id="nntCI"></div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-box">
+            <div class="val" id="arrVal">—</div>
+            <div class="lbl">Absolute Risk Reduction</div>
+          </div>
+          <div class="metric-box">
+            <div class="val" id="rrrVal">—</div>
+            <div class="lbl">Relative Risk Reduction</div>
+          </div>
+          <div class="metric-box">
+            <div class="val" id="piNNT">—</div>
+            <div class="lbl">NNT Prediction Interval</div>
+          </div>
+          <div class="metric-box">
+            <div class="val" id="eventsPreventedVal">—</div>
+            <div class="lbl">Events Prevented / Year</div>
+          </div>
+          <div class="metric-box">
+            <div class="val" id="costPerEvent">—</div>
+            <div class="lbl">Cost per Event Prevented</div>
+          </div>
+          <div class="metric-box">
+            <div class="val" id="certaintyVal">—</div>
+            <div class="lbl">GRADE-style Certainty</div>
+          </div>
+        </div>
+
+        <!-- NNT vs Baseline Risk Chart -->
+        <div id="nntCurveChart" style="width:100%;height:320px;"></div>
+
+        <!-- Decision Curve -->
+        <div id="decisionCurveChart" style="width:100%;height:320px;margin-top:16px;"></div>
+
+        <div style="margin-top:12px;text-align:right;">
+          <button class="btn-primary btn-sm" onclick="exportBundle()">Export TruthCert Bundle</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ABOUT MODAL
+═══════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+  <div class="modal">
+    <button class="modal-close" id="aboutClose" aria-label="Close">&times;</button>
+    <h2 id="aboutTitle">NNTMapper v1.0.0</h2>
+    <p><strong>Meta-Analytic Effect → Clinical Decision Converter</strong></p>
+    <p>Converts pooled meta-analytic effects (OR, RR, HR) into clinician-friendly metrics:
+       Number Needed to Treat, Absolute Risk Reduction, Decision Curves, and Population Impact estimates.</p>
+    <h3>NNT Formulas</h3>
+    <ul>
+      <li><strong>OR:</strong> ARR = CER - CER·OR / (1 - CER + CER·OR); NNT = 1/ARR</li>
+      <li><strong>RR:</strong> ARR = CER·(1 - RR); NNT = 1/ARR</li>
+      <li><strong>HR:</strong> ARR = CER - (1 - (1-CER)^HR); NNT = 1/ARR</li>
+    </ul>
+    <h3>Prediction Intervals</h3>
+    <p>When tau² > 0, the prediction interval for the pooled effect is computed as
+       θ ± t_{k-2,0.975} · √(SE² + tau²), then converted to the NNT scale.</p>
+    <h3>Decision Curves</h3>
+    <p>Net benefit at threshold p_t: NB = (TP/N) - (FP/N)·(p_t/(1-p_t)). Three strategies compared:
+       Treat All, Treat None, and the meta-analytic estimate.</p>
+    <h3>Limitations</h3>
+    <ul>
+      <li>NNT depends heavily on baseline risk — always specify the target population</li>
+      <li>HR-to-NNT conversion assumes exponential survival (constant hazard)</li>
+      <li>Decision curves use a simplified binary outcome framework</li>
+      <li>Heterogeneity propagation uses normal approximation of the PI</li>
+    </ul>
+    <h3>Citation</h3>
+    <p>NNTMapper v1.0.0 (2026). Browser-based meta-analytic NNT calculator with decision curves.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     JAVASCRIPT ENGINE
+═══════════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ── Utilities ─────────────────────────────────────────────────── */
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function normalCDF(x) {
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x) / Math.sqrt(2);
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1) * t * Math.exp(-x*x);
+  return 0.5 * (1 + sign * y);
+}
+
+function tQuantile(df, p) {
+  // Approximation for t-distribution quantile (Hill 1970)
+  if (df <= 0) return 1.96;
+  if (df >= 120) return normalQuantile(p);
+  const a = 1 / (df - 0.5);
+  const b = 48 / (a * a);
+  let c = ((20700 * a / b - 98) * a - 16) * a + 96.36;
+  const d = ((94.5 / (b + c) - 3) / b + 1) * Math.sqrt(a * Math.PI * 0.5) * df;
+  let x = d * p;
+  let y = Math.pow(x, 2 / df);
+  if (y > 0.05 + a) {
+    x = normalQuantile(p * 0.5);
+    y = x * x;
+    if (df < 5) c = c + 0.3 * (df - 4.5) * (x + 0.6);
+    c = (((0.05 * d * x - 5) * x - 7) * x - 2) * x + b + c;
+    y = (((((0.4 * y + 6.3) * y + 36) * y + 94.5) / c - y - 3) / b + 1) * x;
+    y = a * y * y;
+    y = y > 0.002 ? Math.exp(y) - 1 : 0.5 * y * y + y;
+  } else {
+    y = ((1 / (((df + 6) / (df * y) - 0.089 * d - 0.822) * (df + 2) * 3)
+         + 0.5 / (df + 4)) * y - 1) * (df + 1) / (df + 2) + 1 / y;
+  }
+  return Math.sqrt(df * y);
+}
+
+function normalQuantile(p) {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  if (p === 0.5) return 0;
+  const pLow = p < 0.5 ? p : 1 - p;
+  const t = Math.sqrt(-2 * Math.log(pLow));
+  const c0=2.515517, c1=0.802853, c2=0.010328;
+  const d1=1.432788, d2=0.189269, d3=0.001308;
+  let z = t - (c0 + c1*t + c2*t*t) / (1 + d1*t + d2*t*t + d3*t*t*t);
+  return p < 0.5 ? -z : z;
+}
+
+/* ── NNT Formulas ──────────────────────────────────────────────── */
+
+/**
+ * Compute ARR and NNT from a relative effect + baseline risk.
+ * @param {string} measure - 'OR', 'RR', or 'HR'
+ * @param {number} effect - pooled effect estimate (e.g., 0.74)
+ * @param {number} cer - control event rate (0-1)
+ * @returns {{arr: number, nnt: number, eer: number}}
+ */
+function computeNNT(measure, effect, cer) {
+  let eer, arr;
+  if (measure === 'OR') {
+    // Exact: EER = CER * OR / (1 - CER + CER * OR)
+    eer = cer * effect / (1 - cer + cer * effect);
+    arr = cer - eer;
+  } else if (measure === 'RR') {
+    eer = cer * effect;
+    arr = cer - eer;
+  } else {
+    // HR: assumes exponential survival
+    // S(t) = (1-CER)^HR → EER = 1 - (1-CER)^HR
+    eer = 1 - Math.pow(1 - cer, effect);
+    arr = cer - eer;
+  }
+  const nnt = arr !== 0 ? 1 / Math.abs(arr) : Infinity;
+  return { arr, nnt: Math.abs(nnt), eer, isHarmful: arr < 0 };
+}
+
+/* ── Built-in Examples ─────────────────────────────────────────── */
+
+const EXAMPLES = {
+  sglt2i: {
+    label: 'SGLT2i in HFrEF',
+    measure: 'OR', est: 0.74, lo: 0.66, hi: 0.83,
+    i2: 0, tau2: 0, k: 8, cer: 20,
+    source: 'McMurray et al. (DAPA-HF, EMPEROR-Reduced pooled)'
+  },
+  statins: {
+    label: 'Statins Primary Prevention',
+    measure: 'RR', est: 0.75, lo: 0.70, hi: 0.80,
+    i2: 34, tau2: 0.005, k: 19, cer: 5,
+    source: 'CTT Collaborators (Lancet 2012)'
+  },
+  aspirin: {
+    label: 'Aspirin Secondary Prevention',
+    measure: 'RR', est: 0.80, lo: 0.73, hi: 0.88,
+    i2: 22, tau2: 0.003, k: 12, cer: 8,
+    source: 'Antithrombotic Trialists (Lancet 2009)'
+  }
+};
+
+/* ── Compute Engine ────────────────────────────────────────────── */
+
+function compute() {
+  const measure = document.getElementById('effectMeasure').value;
+  const est = parseFloat(document.getElementById('effectEst').value);
+  const lo  = parseFloat(document.getElementById('effectLo').value);
+  const hi  = parseFloat(document.getElementById('effectHi').value);
+  const i2  = parseFloat(document.getElementById('i2').value) ?? 0;
+  const tau2 = parseFloat(document.getElementById('tau2').value) ?? 0;
+  const k   = parseInt(document.getElementById('kStudies').value) ?? 2;
+  const cer = parseFloat(document.getElementById('baselineRisk').value) / 100;
+  const popSize = parseInt(document.getElementById('popSize').value) ?? 10000;
+  const costPerTx = parseFloat(document.getElementById('costPerTx').value) ?? 10000;
+
+  if (!isFinite(est) || !isFinite(lo) || !isFinite(hi) || est <= 0 || lo <= 0 || hi <= 0) {
+    document.getElementById('nntValue').textContent = 'Invalid input';
+    return;
+  }
+
+  // Point estimate NNT
+  const res = computeNNT(measure, est, cer);
+
+  // CI for NNT: apply formula to CI bounds (note: NNT inverts the order)
+  const resLo = computeNNT(measure, lo, cer);
+  const resHi = computeNNT(measure, hi, cer);
+  const nntLoCI = Math.min(resLo.nnt, resHi.nnt);
+  const nntHiCI = Math.max(resLo.nnt, resHi.nnt);
+
+  // Prediction interval: theta ± t_{k-2} * sqrt(SE² + tau²)
+  const logEst = Math.log(est);
+  const logSE  = (Math.log(hi) - Math.log(lo)) / (2 * 1.96);
+  const tCrit  = k > 2 ? tQuantile(k - 2, 0.975) : 2.0;
+  const piHalfWidth = tCrit * Math.sqrt(logSE * logSE + tau2);
+  const piLoEffect = Math.exp(logEst - piHalfWidth);
+  const piHiEffect = Math.exp(logEst + piHalfWidth);
+  const resPiLo = computeNNT(measure, piLoEffect, cer);
+  const resPiHi = computeNNT(measure, piHiEffect, cer);
+  const piNntLo = Math.min(resPiLo.nnt, resPiHi.nnt);
+  const piNntHi = Math.max(resPiLo.nnt, resPiHi.nnt);
+
+  // RRR
+  const rrr = measure === 'OR'
+    ? 1 - (est * (1 - cer)) / (1 - cer + cer * est) / cer * (1 - cer + cer)
+    : 1 - est;
+
+  // Population impact
+  const eventsPrevented = Math.round(res.arr * popSize);
+  const costPerEventPrevented = eventsPrevented > 0
+    ? costPerTx * popSize / eventsPrevented
+    : Infinity;
+
+  // GRADE-style certainty
+  let certainty = 'High';
+  if (i2 > 50) certainty = 'Low';
+  else if (i2 > 25) certainty = 'Moderate';
+  if (k < 5) certainty = certainty === 'High' ? 'Moderate' : 'Low';
+
+  // ── Update DOM ──
+  const gauge = document.getElementById('nntGauge');
+  const nntDisp = res.isHarmful ? 'NNH ' + Math.round(res.nnt) : Math.round(res.nnt);
+  document.getElementById('nntValue').textContent = nntDisp;
+  gauge.className = 'nnt-gauge ' + (res.isHarmful ? 'red' : res.nnt <= 20 ? 'green' : res.nnt <= 50 ? 'amber' : 'red');
+  document.getElementById('nntCI').textContent =
+    '95% CI: ' + Math.round(nntLoCI) + ' to ' + Math.round(nntHiCI);
+
+  document.getElementById('arrVal').textContent = (res.arr * 100).toFixed(1) + '%';
+  document.getElementById('rrrVal').textContent = ((1 - est) * 100).toFixed(0) + '%';
+  document.getElementById('piNNT').textContent = Math.round(piNntLo) + ' – ' + Math.round(piNntHi);
+  document.getElementById('eventsPreventedVal').textContent =
+    (eventsPrevented >= 0 ? '+' : '') + eventsPrevented.toLocaleString();
+  document.getElementById('costPerEvent').textContent =
+    isFinite(costPerEventPrevented) ? '$' + Math.round(costPerEventPrevented).toLocaleString() : '—';
+  document.getElementById('certaintyVal').textContent = certainty;
+
+  // ── Charts ──
+  renderNNTCurve(measure, est, lo, hi, tau2, k, cer);
+  renderDecisionCurve(measure, est, cer);
+
+  // Store for export
+  window._lastResult = { measure, est, lo, hi, i2, tau2, k, cer, popSize, costPerTx,
+    nnt: res.nnt, arr: res.arr, rrr: 1 - est, nntCI: [nntLoCI, nntHiCI],
+    piNNT: [piNntLo, piNntHi], eventsPrevented, costPerEventPrevented, certainty,
+    isHarmful: res.isHarmful };
+}
+
+/* ── NNT vs Baseline Risk Curve ────────────────────────────────── */
+
+function renderNNTCurve(measure, est, lo, hi, tau2, k, currentCER) {
+  const cerRange = [];
+  const nntMain = [], nntLo = [], nntHi = [];
+
+  for (let c = 1; c <= 50; c++) {
+    const cer = c / 100;
+    cerRange.push(c);
+    const r = computeNNT(measure, est, cer);
+    const rLo = computeNNT(measure, lo, cer);
+    const rHi = computeNNT(measure, hi, cer);
+    nntMain.push(Math.min(r.nnt, 500));
+    nntLo.push(Math.min(Math.min(rLo.nnt, rHi.nnt), 500));
+    nntHi.push(Math.min(Math.max(rLo.nnt, rHi.nnt), 500));
+  }
+
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const layout = {
+    title: { text: 'NNT vs Baseline Risk', font: { size: 14 } },
+    xaxis: { title: 'Baseline Risk (%)', color: dark ? '#e0e0e0' : '#1a1a2e' },
+    yaxis: { title: 'NNT', color: dark ? '#e0e0e0' : '#1a1a2e', range: [0, Math.min(Math.max(...nntHi), 200)] },
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: dark ? '#e0e0e0' : '#1a1a2e' },
+    showlegend: true, legend: { x: 0.6, y: 0.95 },
+    shapes: [{
+      type: 'line', x0: currentCER * 100, x1: currentCER * 100, y0: 0, y1: 1,
+      yref: 'paper', line: { color: 'red', dash: 'dash', width: 2 }
+    }],
+    margin: { t: 40, r: 20, b: 50, l: 60 }
+  };
+
+  Plotly.react('nntCurveChart', [
+    { x: cerRange, y: nntHi, fill: 'none', mode: 'lines', line: { width: 0 }, showlegend: false },
+    { x: cerRange, y: nntLo, fill: 'tonexty', mode: 'lines', line: { width: 0 },
+      fillcolor: 'rgba(13,110,253,0.15)', name: '95% CI band' },
+    { x: cerRange, y: nntMain, mode: 'lines', line: { color: '#0d6efd', width: 3 }, name: 'NNT (point)' }
+  ], layout, { responsive: true, displayModeBar: false });
+}
+
+/* ── Decision Curve ────────────────────────────────────────────── */
+
+function renderDecisionCurve(measure, est, cer) {
+  const thresholds = [];
+  const treatAll = [], treatNone = [], metaAnalytic = [];
+
+  // Derive RR from whatever measure was given
+  let rr;
+  if (measure === 'OR') {
+    rr = est * (1 - cer) / (1 - cer + cer * est) / cer * cer +
+         est / (1 - cer + cer * est) * (1 - cer);
+    // Simpler: eer/cer ratio
+    const eer = cer * est / (1 - cer + cer * est);
+    rr = eer / cer;
+  } else if (measure === 'RR') {
+    rr = est;
+  } else {
+    const eer = 1 - Math.pow(1 - cer, est);
+    rr = eer / cer;
+  }
+
+  for (let pt = 1; pt <= 50; pt++) {
+    const pThresh = pt / 100;
+    thresholds.push(pt);
+
+    // Treat all: NB = prevalence - (1 - prevalence) * pt/(1-pt)
+    const nbAll = cer - (1 - cer) * (pThresh / (1 - pThresh));
+    treatAll.push(nbAll);
+    treatNone.push(0);
+
+    // Meta-analytic strategy: NB = sensitivity * prevalence - (1-specificity)(1-prevalence) * pt/(1-pt)
+    // For a treatment effect: sensitivity ≈ 1 (treat all who benefit), specificity depends on effect size
+    // Simplified: NB_meta = cer * (1-rr) - (1 - cer*rr / cer) * (1-cer) * pt/(1-pt) when beneficial
+    // More standard: NB = (TP - FP * w) / N where w = pt/(1-pt)
+    // With treatment: TP = cer * (1-rr) * N, FP ≈ (1-cer) * 0 (treatment doesn't create events in non-cases)
+    // So: NB_meta = cer*(1-rr) = ARR (constant, independent of threshold for a treatment decision)
+    const arr = cer * (1 - rr);
+    metaAnalytic.push(arr > 0 ? arr : 0);
+  }
+
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const layout = {
+    title: { text: 'Decision Curve Analysis', font: { size: 14 } },
+    xaxis: { title: 'Threshold Probability (%)', color: dark ? '#e0e0e0' : '#1a1a2e' },
+    yaxis: { title: 'Net Benefit', color: dark ? '#e0e0e0' : '#1a1a2e' },
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: dark ? '#e0e0e0' : '#1a1a2e' },
+    showlegend: true, legend: { x: 0.55, y: 0.95 },
+    margin: { t: 40, r: 20, b: 50, l: 60 }
+  };
+
+  Plotly.react('decisionCurveChart', [
+    { x: thresholds, y: treatAll, mode: 'lines', line: { color: '#6c757d', dash: 'dash', width: 2 }, name: 'Treat All' },
+    { x: thresholds, y: treatNone, mode: 'lines', line: { color: '#adb5bd', dash: 'dot', width: 1 }, name: 'Treat None' },
+    { x: thresholds, y: metaAnalytic, mode: 'lines', line: { color: '#198754', width: 3 }, name: 'Meta-Analytic Strategy' }
+  ], layout, { responsive: true, displayModeBar: false });
+}
+
+/* ── Export TruthCert Bundle ───────────────────────────────────── */
+
+async function exportBundle() {
+  if (!window._lastResult) { alert('Run computation first.'); return; }
+  const r = window._lastResult;
+  const now = new Date().toISOString();
+
+  const bundle = {
+    '@type': 'TruthCert NNT Bundle',
+    version: '1.0.0',
+    timestamp: now,
+    input: { measure: r.measure, estimate: r.est, ci: [r.lo, r.hi],
+             i2: r.i2, tau2: r.tau2, k: r.k, baseline_risk: r.cer },
+    results: {
+      nnt: +r.nnt.toFixed(1), arr: +r.arr.toFixed(4), rrr: +r.rrr.toFixed(3),
+      nnt_ci: [+r.nntCI[0].toFixed(1), +r.nntCI[1].toFixed(1)],
+      nnt_prediction_interval: [+r.piNNT[0].toFixed(1), +r.piNNT[1].toFixed(1)],
+      is_harmful: r.isHarmful, certainty: r.certainty
+    },
+    population_impact: {
+      population_size: r.popSize,
+      events_prevented: r.eventsPrevented,
+      cost_per_event_prevented: isFinite(r.costPerEventPrevented) ? +r.costPerEventPrevented.toFixed(0) : null,
+      cost_per_treatment_year: r.costPerTx
+    },
+    provenance: { tool: 'NNTMapper v1.0.0', formulas: 'Bender 2001, Vickers 2006' }
+  };
+
+  const json = JSON.stringify(bundle, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'nntmapper_' + now.slice(0,10).replace(/-/g,'') + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ── Event Listeners ───────────────────────────────────────────── */
+
+// Example loader
+document.getElementById('exampleSelect').addEventListener('change', function() {
+  const ex = EXAMPLES[this.value];
+  if (!ex) return;
+  document.getElementById('effectMeasure').value = ex.measure;
+  document.getElementById('effectEst').value = ex.est;
+  document.getElementById('effectLo').value = ex.lo;
+  document.getElementById('effectHi').value = ex.hi;
+  document.getElementById('i2').value = ex.i2;
+  document.getElementById('tau2').value = ex.tau2;
+  document.getElementById('kStudies').value = ex.k;
+  document.getElementById('baselineRisk').value = ex.cer;
+  updateCERDisplay();
+  compute();
+});
+
+// Baseline risk slider
+function updateCERDisplay() {
+  const v = document.getElementById('baselineRisk').value;
+  document.getElementById('cerDisplay').textContent = parseFloat(v).toFixed(1) + '%';
+  const slider = document.getElementById('baselineRisk');
+  slider.setAttribute('aria-valuenow', v);
+}
+document.getElementById('baselineRisk').addEventListener('input', function() {
+  updateCERDisplay();
+  compute();
+});
+
+// Dark mode
+document.getElementById('darkModeBtn').addEventListener('click', function() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+  this.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+  this.setAttribute('aria-label', isDark ? 'Switch to dark mode' : 'Switch to light mode');
+  if (window._lastResult) compute(); // re-render charts
+});
+
+// About modal
+(function() {
+  const modal = document.getElementById('aboutModal');
+  const openBtn = document.getElementById('aboutBtn');
+  const closeBtn = document.getElementById('aboutClose');
+  let _kbListener = null;
+
+  function openModal() {
+    modal.classList.remove('hidden');
+    closeBtn.focus();
+    _kbListener = function(e) {
+      if (e.key === 'Escape') { closeModal(); e.preventDefault(); }
+      if (e.key === 'Tab') {
+        const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey) { if (document.activeElement === first) { last.focus(); e.preventDefault(); } }
+        else            { if (document.activeElement === last)  { first.focus(); e.preventDefault(); } }
+      }
+    };
+    document.addEventListener('keydown', _kbListener);
+  }
+
+  function closeModal() {
+    modal.classList.add('hidden');
+    if (_kbListener) { document.removeEventListener('keydown', _kbListener); _kbListener = null; }
+    openBtn.focus();
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+})();
+
+// Auto-compute on load with default example
+compute();
+
+</script>
+</body>
+</html>

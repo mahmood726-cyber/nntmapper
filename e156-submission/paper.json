@@ -1,0 +1,97 @@
+{
+  "title": "NNTMapper: Converting Meta-Analytic Effects into Population-Specific Number Needed to Treat with Heterogeneity Propagation",
+  "slug": "nntmapper",
+  "author": "Mahmood Ahmad",
+  "date": "2026-03-26",
+  "body": "How does the Number Needed to Treat from a meta-analysis vary across patient populations with different baseline risks, and how should heterogeneity propagate to this metric? We validated NNTMapper against R using three cardiovascular examples: SGLT2 inhibitors in heart failure, statins for primary prevention, and aspirin for secondary prevention. The tool converts pooled effects into population-specific NNT, absolute risk reduction, and relative risk reduction across user-specified baseline risks, with prediction intervals incorporating between-study variance via the t-distribution. For SGLT2 inhibitors with pooled OR 0.74 (95% CI 0.66 to 0.83) at 20 percent baseline risk, NNTMapper computed NNT of 23 (CI 17 to 37), matching R to machine precision. Decision curve analysis identified net benefit thresholds where treatment decisions shifted across the baseline risk spectrum. Converting relative effects to absolute patient-relevant metrics makes meta-analytic evidence directly actionable for clinical decision-making. The tool is limited to single pooled estimates and cannot incorporate patient-level risk stratification or competing risks.",
+  "word_count": 156,
+  "sentence_count": 7,
+  "sentences": [
+    {
+      "role": "Question",
+      "text": "How does the Number Needed to Treat from a meta-analysis vary across patient populations with different baseline risks, and how should heterogeneity propagate to this metric?"
+    },
+    {
+      "role": "Dataset",
+      "text": "We validated NNTMapper against R using three cardiovascular examples: SGLT2 inhibitors in heart failure, statins for primary prevention, and aspirin for secondary prevention."
+    },
+    {
+      "role": "Method",
+      "text": "The tool converts pooled effects into population-specific NNT, absolute risk reduction, and relative risk reduction across user-specified baseline risks, with prediction intervals incorporating between-study variance via the t-distribution."
+    },
+    {
+      "role": "Primary result",
+      "text": "For SGLT2 inhibitors with pooled OR 0.74 (95% CI 0.66 to 0.83) at 20 percent baseline risk, NNTMapper computed NNT of 23 (CI 17 to 37), matching R to machine precision."
+    },
+    {
+      "role": "Robustness",
+      "text": "Decision curve analysis identified net benefit thresholds where treatment decisions shifted across the baseline risk spectrum."
+    },
+    {
+      "role": "Interpretation",
+      "text": "Converting relative effects to absolute patient-relevant metrics makes meta-analytic evidence directly actionable for clinical decision-making."
+    },
+    {
+      "role": "Boundary",
+      "text": "The tool is limited to single pooled estimates and cannot incorporate patient-level risk stratification or competing risks."
+    }
+  ],
+  "notes": {
+    "app": "NNTMapper v1.0",
+    "data": "3 cardiovascular validation examples (SGLT2i, statins, aspirin)",
+    "code": "https://github.com/mahmood726-cyber/nntmapper",
+    "doi": "",
+    "version": "1.0",
+    "date": "2026-03-26",
+    "certainty": "high",
+    "validation": "DRAFT"
+  },
+  "type": "methods",
+  "primary_estimand": "Number Needed to Treat across baseline risk range",
+  "validation": {
+    "status": "pass",
+    "checks": [
+      {
+        "name": "single paragraph",
+        "ok": true,
+        "detail": "Body must not contain blank-line paragraph breaks."
+      },
+      {
+        "name": "sentence count",
+        "ok": true,
+        "detail": "Found 7 sentences."
+      },
+      {
+        "name": "word count",
+        "ok": true,
+        "detail": "Found 156 words."
+      },
+      {
+        "name": "no headings",
+        "ok": true,
+        "detail": "No markdown headings allowed in body."
+      },
+      {
+        "name": "no links",
+        "ok": true,
+        "detail": "No links or DOI links allowed in body."
+      },
+      {
+        "name": "result sentence has interval",
+        "ok": true,
+        "detail": "Sentence 4 should include a confidence interval."
+      },
+      {
+        "name": "result sentence has estimand",
+        "ok": true,
+        "detail": "Sentence 4 should name an effect measure or test metric."
+      },
+      {
+        "name": "boundary sentence present",
+        "ok": true,
+        "detail": "Sentence 7 should express a limitation, harm, or scope boundary."
+      }
+    ]
+  },
+  "schema": "e156-v0.2"
+}

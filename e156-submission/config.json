@@ -1,0 +1,61 @@
+{
+  "title": "NNTMapper: Converting Meta-Analytic Effects into Population-Specific Number Needed to Treat with Heterogeneity Propagation",
+  "slug": "nntmapper",
+  "path": "C:\\Models\\NNTMapper",
+  "type": "methods",
+  "primary_estimand": "Number Needed to Treat across baseline risk range",
+  "certainty": "high",
+  "summary": "NNTMapper converts pooled meta-analytic effects to population-specific NNT with prediction intervals, matching R to machine precision across three cardiovascular validation examples.",
+  "study_count": null,
+  "participant_count": null,
+  "body": "How does the Number Needed to Treat from a meta-analysis vary across patient populations with different baseline risks, and how should heterogeneity propagate to this metric? We validated NNTMapper against R using three cardiovascular examples: SGLT2 inhibitors in heart failure, statins for primary prevention, and aspirin for secondary prevention. The tool converts pooled effects into population-specific NNT, absolute risk reduction, and relative risk reduction across user-specified baseline risks, with prediction intervals incorporating between-study variance via the t-distribution. For SGLT2 inhibitors with pooled OR 0.74 (95% CI 0.66 to 0.83) at 20 percent baseline risk, NNTMapper computed NNT of 23 (CI 17 to 37), matching R to machine precision. Decision curve analysis identified net benefit thresholds where treatment decisions shifted across the baseline risk spectrum. Converting relative effects to absolute patient-relevant metrics makes meta-analytic evidence directly actionable for clinical decision-making. The tool is limited to single pooled estimates and cannot incorporate patient-level risk stratification or competing risks.",
+  "notes": {
+    "app": "NNTMapper v1.0",
+    "data": "3 cardiovascular validation examples (SGLT2i, statins, aspirin)",
+    "code": "https://github.com/mahmood726-cyber/nntmapper",
+    "doi": "",
+    "version": "1.0",
+    "date": "2026-03-26",
+    "certainty": "high",
+    "validation": "DRAFT"
+  },
+  "author": "Mahmood Ahmad",
+  "date": "2026-03-26",
+  "sentences": [
+    {
+      "role": "Question",
+      "text": "How does the Number Needed to Treat from a meta-analysis vary across patient populations with different baseline risks, and how should heterogeneity propagate to this metric?"
+    },
+    {
+      "role": "Dataset",
+      "text": "We validated NNTMapper against R using three cardiovascular examples: SGLT2 inhibitors in heart failure, statins for primary prevention, and aspirin for secondary prevention."
+    },
+    {
+      "role": "Method",
+      "text": "The tool converts pooled effects into population-specific NNT, absolute risk reduction, and relative risk reduction across user-specified baseline risks, with prediction intervals incorporating between-study variance via the t-distribution."
+    },
+    {
+      "role": "Primary result",
+      "text": "For SGLT2 inhibitors with pooled OR 0.74 (95% CI 0.66 to 0.83) at 20 percent baseline risk, NNTMapper computed NNT of 23 (CI 17 to 37), matching R to machine precision."
+    },
+    {
+      "role": "Robustness",
+      "text": "Decision curve analysis identified net benefit thresholds where treatment decisions shifted across the baseline risk spectrum."
+    },
+    {
+      "role": "Interpretation",
+      "text": "Converting relative effects to absolute patient-relevant metrics makes meta-analytic evidence directly actionable for clinical decision-making."
+    },
+    {
+      "role": "Boundary",
+      "text": "The tool is limited to single pooled estimates and cannot incorporate patient-level risk stratification or competing risks."
+    }
+  ],
+  "affiliation": "Tahir Heart Institute",
+  "email": "mahmood.ahmad2@nhs.net",
+  "references": [
+    "Borenstein M, Hedges LV, Higgins JPT, Rothstein HR. Introduction to Meta-Analysis. 2nd ed. Wiley; 2021.",
+    "Higgins JPT, Thompson SG, Deeks JJ, Altman DG. Measuring inconsistency in meta-analyses. BMJ. 2003;327(7414):557-560.",
+    "Cochrane Handbook for Systematic Reviews of Interventions. Version 6.4. Cochrane; 2023."
+  ]
+}

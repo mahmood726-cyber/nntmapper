@@ -1,8 +1,13 @@
 # NNTMapper: An Open-Access Browser Tool for Converting Meta-Analytic Effects into Clinician-Friendly Decision Metrics
 
 ## Authors
-[Author Name], [Affiliation]
-ORCID: [ORCID]
+Mahmood Ahmad^1^
+
+^1^ Royal Free Hospital, London, United Kingdom
+
+Corresponding author: mahmood.ahmad2@nhs.net
+
+ORCID: 0009-0003-7781-4478
 
 ## Abstract (250 words)
 
@@ -102,7 +107,15 @@ First, the HR-to-NNT conversion assumes exponential (constant-hazard) survival, 
 
 ### Availability
 
-NNTMapper is freely available at [GitHub URL] under an open-source license. The tool requires no installation, no server, and no login — it runs entirely in the browser.
+NNTMapper is freely available at [GitHub URL] under the MIT License. The tool requires no installation, no server, and no login — it runs entirely in the browser.
+
+## Funding
+
+No external funding was received for this work.
+
+## Competing Interests
+
+The author declares no competing interests.
 
 ## References
 

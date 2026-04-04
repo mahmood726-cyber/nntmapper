@@ -433,6 +433,9 @@ function compute() {
   const resLo = computeNNT(measure, lo, cer);
   const resHi = computeNNT(measure, hi, cer);
   const ciCrossesNull = resLo.isHarmful !== resHi.isHarmful;
+  // Altman convention: identify which bound gives benefit vs harm
+  const nntBenefit = resLo.isHarmful ? resHi.nnt : resLo.nnt;
+  const nntHarm    = resLo.isHarmful ? resLo.nnt : resHi.nnt;
   const nntLoCI = Math.min(resLo.nnt, resHi.nnt);
   const nntHiCI = Math.max(resLo.nnt, resHi.nnt);
 
@@ -476,7 +479,7 @@ function compute() {
   document.getElementById('nntValue').textContent = nntDisp;
   gauge.className = 'nnt-gauge ' + (res.isHarmful ? 'red' : res.nnt <= 20 ? 'green' : res.nnt <= 50 ? 'amber' : 'red');
   document.getElementById('nntCI').textContent = ciCrossesNull
-    ? 'NNTB ' + Math.round(nntLoCI) + ' to \u221E to NNTH ' + Math.round(nntHiCI)
+    ? 'NNTB ' + Math.round(nntBenefit) + ' to \u221E to NNTH ' + Math.round(nntHarm)
     : '95% CI: ' + Math.round(nntLoCI) + ' to ' + Math.round(nntHiCI);
 
   document.getElementById('arrVal').textContent = (res.arr * 100).toFixed(1) + '%';

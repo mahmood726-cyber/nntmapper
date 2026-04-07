@@ -1,6 +1,6 @@
 Mahmood Ahmad
 Tahir Heart Institute
-author@example.com
+mahmood.ahmad2@nhs.net
 
 NNTMapper: Converting Meta-Analytic Effects into Population-Specific Number Needed to Treat with Heterogeneity Propagation
 
